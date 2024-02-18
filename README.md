@@ -11,3 +11,6 @@
 Ниже представлен пример работы с программой:
 
 ![image](https://github.com/Kulibyka/YandexL_1_prj/assets/59702274/91f6ed9a-864f-4729-b05b-29c2489e0d06)
+
+
+Telegram: @Vzyhovich
