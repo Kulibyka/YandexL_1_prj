@@ -12,5 +12,7 @@
 
 ![image](https://github.com/Kulibyka/YandexL_1_prj/assets/59702274/91f6ed9a-864f-4729-b05b-29c2489e0d06)
 
+![image](https://github.com/Kulibyka/YandexL_1_prj/assets/59702274/6de47cf6-13be-4572-b846-69a98ae0cde0)
+
 
 Telegram: @Vzyhovich
