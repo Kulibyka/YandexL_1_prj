@@ -22,6 +22,7 @@ type Task struct {
 	Status     string     `json:"status"`
 	Result     float64    `json:"result,omitempty"`
 	AgentID    int        `json:"agent_id,omitempty"`
+	Duration   float64    `json:"duration(seconds),omitempty"`
 	Mutex      sync.Mutex `json:"-"`
 }
 
@@ -89,7 +90,16 @@ func listTasksHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func getOperationsHandler(w http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(w).Encode(operations)
+	// Создаем словарь для хранения имени операции и ее длительности в секундах
+	operationDurations := make(map[string]int64)
+
+	// Проходим по каждой операции
+	for _, op := range operations {
+		duration := op.Duration.Seconds()
+		operationDurations[op.Name] = int64(duration)
+	}
+
+	json.NewEncoder(w).Encode(operationDurations)
 }
 
 // Агент
@@ -98,13 +108,17 @@ func startAgents(numAgents int) {
 		go func(agentID int) {
 			for task := range taskChannel {
 				task.Status = "calculated"
+				startTime := time.Now()
 
 				task.Mutex.Lock()
 				task.Result = evaluateExpression(task.Expression)
 				task.Mutex.Unlock()
 
 				task.Status = "completed"
+				endTime := time.Now()
+				task.Duration = endTime.Sub(startTime).Seconds()
 			}
+
 		}(i + 1)
 	}
 }
