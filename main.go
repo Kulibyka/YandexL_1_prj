@@ -21,8 +21,6 @@ type Task struct {
 	Expression string     `json:"expression"`
 	Status     string     `json:"status"`
 	Result     float64    `json:"result,omitempty"`
-	StartTime  time.Time  `json:"start_time,omitempty"`
-	EndTime    time.Time  `json:"end_time,omitempty"`
 	AgentID    int        `json:"agent_id,omitempty"`
 	Mutex      sync.Mutex `json:"-"`
 }
@@ -40,7 +38,6 @@ var (
 )
 
 func addTaskHandler(w http.ResponseWriter, r *http.Request) {
-	// Распаковываем JSON-данные из запроса
 	var task Task
 	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
 		http.Error(w, "Failed to decode JSON", http.StatusBadRequest)
@@ -51,18 +48,16 @@ func addTaskHandler(w http.ResponseWriter, r *http.Request) {
 	task.ID = nextTaskID
 	nextTaskID++
 	task.Status = "queued"
-	task.Mutex = sync.Mutex{} // Инициализируем Mutex для безопасного доступа к задаче
+	task.Mutex = sync.Mutex{}
 	tasks = append(tasks, &task)
 
 	// Отправляем задачу в канал для агента
 	taskChannel <- &task
 
-	// Отвечаем клиенту с ID задачи
 	json.NewEncoder(w).Encode(map[string]int{"task_id": task.ID})
 }
 
 func getTaskResultHandler(w http.ResponseWriter, r *http.Request) {
-	// Извлекаем ID задачи из URL
 	segments := strings.Split(strings.TrimPrefix(r.URL.Path, "/tasks/"), "/")
 	taskID, err := strconv.Atoi(segments[0])
 	if err != nil {
@@ -70,7 +65,6 @@ func getTaskResultHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Проверяем, существует ли задача с указанным ID
 	if taskID < 1 || taskID > len(tasks) {
 		http.Error(w, "Task not found", http.StatusNotFound)
 		return
@@ -79,79 +73,37 @@ func getTaskResultHandler(w http.ResponseWriter, r *http.Request) {
 	// Получаем задачу по ее ID
 	task := tasks[taskID-1]
 
-	// Блокируем Mutex для безопасного доступа к задаче
-	task.Mutex.Lock()
-	defer task.Mutex.Unlock()
-
 	// Если задача еще не завершена, отправляем сообщение ожидания
 	if task.Status != "completed" {
-		w.WriteHeader(http.StatusAccepted) // Статус код 202 Accepted
+		w.WriteHeader(http.StatusAccepted)
 		json.NewEncoder(w).Encode(map[string]string{"status": "Task is not completed yet"})
 		return
 	}
 
-	// Отвечаем клиенту с результатом задачи
 	response := map[string]float64{"result": task.Result}
 	json.NewEncoder(w).Encode(response)
 }
 
 func listTasksHandler(w http.ResponseWriter, r *http.Request) {
-	// Отвечаем клиенту со списком задач
 	json.NewEncoder(w).Encode(tasks)
 }
 
 func getOperationsHandler(w http.ResponseWriter, r *http.Request) {
-	// Отправляем клиенту список доступных операций со временем их выполнения
 	json.NewEncoder(w).Encode(operations)
 }
 
-func getTaskForExecutionHandler(w http.ResponseWriter, r *http.Request) {
-	// Получаем задачу для выполнения от оркестратора
-	task := <-taskChannel
-
-	// Отправляем задачу клиенту
-	json.NewEncoder(w).Encode(task)
-}
-
-func receiveTaskResultHandler(w http.ResponseWriter, r *http.Request) {
-	// Распаковываем JSON-данные из запроса
-	var task Task
-	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	defer r.Body.Close()
-
-	// Находим соответствующую задачу в списке
-	for _, t := range tasks {
-		if t.ID == task.ID {
-			// Обновляем статус и результат задачи
-			t.Status = "completed"
-			t.Result = task.Result
-			t.EndTime = time.Now()
-			break
-		}
-	}
-}
-
-// Другие обработчики для остальных эндпоинтов...
-
-// Агент (вычислитель)
+// Агент
 func startAgents(numAgents int) {
 	for i := 0; i < numAgents; i++ {
 		go func(agentID int) {
 			for task := range taskChannel {
-				// Получаем задачу из канала
 				task.Status = "calculated"
-				task.StartTime = time.Now()
 
-				// Выполняем вычисление
 				task.Mutex.Lock()
 				task.Result = evaluateExpression(task.Expression)
 				task.Mutex.Unlock()
 
 				task.Status = "completed"
-				task.EndTime = time.Now()
 			}
 		}(i + 1)
 	}
@@ -211,12 +163,14 @@ func evaluateExpression(expression string) float64 {
 				operatorStack = operatorStack[:len(operatorStack)-1]
 			}
 		case '+', '-':
-			for len(operatorStack) > 0 && (operatorStack[len(operatorStack)-1] == '+' || operatorStack[len(operatorStack)-1] == '-' || operatorStack[len(operatorStack)-1] == '*' || operatorStack[len(operatorStack)-1] == '/') {
+			for len(operatorStack) > 0 && (operatorStack[len(operatorStack)-1] == '+' ||
+				operatorStack[len(operatorStack)-1] == '-' || operatorStack[len(operatorStack)-1] == '*' || operatorStack[len(operatorStack)-1] == '/') {
 				performOperation()
 			}
 			operatorStack = append(operatorStack, char)
 		case '*', '/':
-			for len(operatorStack) > 0 && (operatorStack[len(operatorStack)-1] == '*' || operatorStack[len(operatorStack)-1] == '/') {
+			for len(operatorStack) > 0 && (operatorStack[len(operatorStack)-1] == '*' ||
+				operatorStack[len(operatorStack)-1] == '/') {
 				performOperation()
 			}
 			operatorStack = append(operatorStack, char)
@@ -227,17 +181,14 @@ func evaluateExpression(expression string) float64 {
 		}
 	}
 
-	// Выполняем все оставшиеся операции
 	for len(operatorStack) > 0 {
 		performOperation()
 	}
 
-	// Возвращаем результат
 	return operandStack[0]
 }
 
 func main() {
-
 	go startAgents(3)
 
 	router := mux.NewRouter()
@@ -245,8 +196,6 @@ func main() {
 	router.HandleFunc("/tasks", listTasksHandler).Methods("GET")
 	router.HandleFunc("/tasks/{id}/result", getTaskResultHandler).Methods("GET")
 	router.HandleFunc("/operations", getOperationsHandler).Methods("GET")
-	router.HandleFunc("/tasks/execute", getTaskForExecutionHandler).Methods("GET")
-	router.HandleFunc("/tasks/result", receiveTaskResultHandler).Methods("POST")
 
 	log.Println("Server started on :8080")
 	log.Fatal(http.ListenAndServe(":8080", router))
